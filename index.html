@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>Fragments of Ngà</title>
+    <link rel="stylesheet" href="preview.css?v=github-pages-test-1" />
+  </head>
+  <body>
+    <main>
+      <div class="grain"></div>
+      <header class="board-title">
+        <p data-title-kicker>personal archive</p>
+        <h1 data-site-title>Fragments<br />of Ngà</h1>
+      </header>
+
+      <section class="stage">
+        <div class="board" data-board></div>
+      </section>
+
+      <section class="detail" data-detail>
+        <button type="button" data-close>×</button>
+        <div class="detail-photo" data-detail-photo></div>
+        <video class="detail-video" data-detail-video controls playsinline></video>
+        <button class="detail-video-play" type="button" data-video-play hidden>Play video</button>
+        <p data-date>12.03.2024</p>
+        <h2 data-title>gió chiều</h2>
+        <span data-note>Có những buổi chiều chỉ cần ngồi cạnh nhau thôi là đủ.</span>
+      </section>
+
+      <button class="view-all" type="button" data-ending>Xem tất cả</button>
+      <button class="fit" type="button" data-fit>fit</button>
+      <button class="admin-toggle" type="button" data-admin-toggle>Admin</button>
+      <button class="music-player" type="button" data-music aria-label="Bật nhạc nền">
+        <span class="music-player__play">▶</span>
+        <span>
+          <b>Đi Đến Nơi Có Gió OST</b>
+          <small data-music-status>tap để phát nền</small>
+        </span>
+      </button>
+      <audio data-audio preload="metadata" src="public/audio/di-den-noi-co-gio.mp3"></audio>
+      <div class="ending" data-ending-copy>
+        <p data-ending-line>Glad you were part of this year.</p>
+        <strong data-birthday-text>Happy Birthday, Ngà.</strong>
+      </div>
+      <footer data-footer>tap một tấm ảnh để camera tự focus</footer>
+
+      <aside class="admin-panel" data-admin-panel aria-label="Admin Panel">
+        <div class="admin-panel__head">
+          <div>
+            <p>CMS Admin</p>
+            <h2>Fragments Editor</h2>
+            <small>Autosave: IndexedDB + localStorage fallback</small>
+          </div>
+          <button type="button" data-admin-close>×</button>
+        </div>
+
+        <div class="admin-tabs">
+          <button type="button" class="is-active" data-tab="content">Content</button>
+          <button type="button" data-tab="media">Media</button>
+          <button type="button" data-tab="layout">Layout</button>
+          <button type="button" data-tab="texts">Text ảnh</button>
+          <button type="button" data-tab="layers">Layers</button>
+          <button type="button" data-tab="data">Data</button>
+        </div>
+
+        <section class="admin-section is-active" data-section="content">
+          <label>Tiêu đề <input data-field="title" /></label>
+          <label>Tên người nhận <input data-field="receiver" /></label>
+          <label>Birthday note <textarea data-field="birthdayText"></textarea></label>
+          <label>Ending line <input data-field="endingText" /></label>
+          <label>Footer <input data-field="footer" /></label>
+          <label>Màu nền <input data-field="backgroundColor" type="color" /></label>
+          <label>Ảnh nền <input data-bg-upload type="file" accept="image/*" /></label>
+        </section>
+
+        <section class="admin-section" data-section="media">
+          <div class="media-type-tabs">
+            <button type="button" class="is-active" data-media-filter="photo">Photos</button>
+            <button type="button" data-media-filter="board">Board Image</button>
+            <button type="button" data-media-filter="decoration">Decorations</button>
+          </div>
+          <label class="upload-box">
+            Upload media
+            <input data-media-upload type="file" accept="image/*,.svg" multiple />
+          </label>
+          <div class="media-grid" data-media-grid></div>
+        </section>
+
+        <section class="admin-section" data-section="layout">
+          <div class="admin-actions">
+            <button type="button" data-add-photo>Thêm ảnh</button>
+            <button type="button" data-add-note>Thêm sticky note</button>
+            <button type="button" data-add-paper>Thêm giấy vintage</button>
+          </div>
+
+          <div class="selected-editor" data-selected-editor>
+            <p>Chọn một ảnh/note trên board để sửa.</p>
+          </div>
+        </section>
+
+        <section class="admin-section" data-section="texts">
+          <div class="photo-text-table" data-photo-text-table></div>
+        </section>
+
+        <section class="admin-section" data-section="layers">
+          <h3>Layer 1 — Background</h3>
+          <label>Upload background
+            <input data-layer-upload="background" type="file" accept="image/*" />
+            <button type="button" data-layer-apply="background">Apply background</button>
+            <button type="button" data-layer-clear="background">Xóa ảnh</button>
+            <small data-layer-status="background">Chưa chọn ảnh</small>
+          </label>
+          <label>Blur <input data-layer-field="background.blur" type="range" min="0" max="32" step="1" /></label>
+          <label>Brightness <input data-layer-field="background.brightness" type="range" min="0.5" max="1.6" step="0.02" /></label>
+          <label>Contrast <input data-layer-field="background.contrast" type="range" min="0.5" max="1.8" step="0.02" /></label>
+          <label>Saturation <input data-layer-field="background.saturation" type="range" min="0" max="2" step="0.02" /></label>
+          <label>Opacity <input data-layer-field="background.opacity" type="range" min="0" max="1" step="0.05" /></label>
+
+          <h3>Layer 2 — Board Image</h3>
+          <label>Replace board image
+            <input data-layer-upload="board" type="file" accept="image/*" />
+            <button type="button" data-layer-apply="board">Replace Image</button>
+            <small data-layer-status="board">Chưa chọn ảnh</small>
+          </label>
+
+          <h3>Layer 3 — Decorations</h3>
+          <label>Upload decoration PNG / WEBP / SVG
+            <input data-layer-upload="decoration" type="file" accept="image/png,image/webp,image/svg+xml" multiple />
+            <button type="button" data-layer-apply="decoration">Add decorations</button>
+            <small data-layer-status="decoration">Chưa chọn ảnh</small>
+          </label>
+        </section>
+
+        <section class="admin-section" data-section="data">
+          <div class="admin-actions">
+            <button type="button" data-export>Export Project JSON</button>
+            <label class="import-button">
+              Import Project JSON
+              <input data-import type="file" accept="application/json" />
+            </label>
+            <button type="button" data-reset-project>Reset localStorage</button>
+          </div>
+          <textarea class="json-output" data-json-output readonly></textarea>
+        </section>
+      </aside>
+    </main>
+
+    <script src="preview.js?v=github-pages-test-1"></script>
+  </body>
+</html>
