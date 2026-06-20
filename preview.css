@@ -3,6 +3,8 @@
   --cream: #f4dfbd;
   --paper: #d7bd92;
   --amber: #d99b42;
+  --font-ui: "Mali", ui-sans-serif, system-ui, sans-serif;
+  --font-hand: "Mali", cursive;
 }
 
 * {
@@ -19,7 +21,7 @@ body {
     radial-gradient(circle at 18% 10%, var(--app-light, rgba(255, 220, 137, 0.38)), transparent 27%),
     radial-gradient(circle at center, var(--app-bg-a, #5a3a20), var(--app-bg-b, #1b1008) 82%);
   color: var(--cream);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   touch-action: none;
 }
 
@@ -47,6 +49,24 @@ body::after {
   background-image: var(--layer-bg-image, none);
   background-size: cover;
   background-position: center;
+}
+
+body.has-plain-background-image {
+  background: #000;
+}
+
+body.has-plain-background-image::before {
+  display: none;
+}
+
+body.has-plain-background-image::after {
+  inset: 0;
+  filter: var(--layer-bg-filter, none);
+  opacity: 1;
+}
+
+body.has-plain-background-image .grain {
+  display: none;
 }
 
 button {
@@ -89,17 +109,18 @@ button {
 .board-title p {
   margin: 0 0 2px;
   color: rgba(90, 54, 28, 0.68);
-  font-family: "Segoe Print", cursive;
-  font-size: 0.74rem;
-  line-height: 1.1;
+  font-family: var(--font-hand);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.25;
 }
 
 .board-title h1 {
   margin: 0;
-  font-family: Georgia, serif;
-  font-size: clamp(1.1rem, 4.6vw, 1.55rem);
-  font-weight: 400;
-  line-height: 0.96;
+  font-family: var(--font-hand);
+  font-size: clamp(1.12rem, 4.4vw, 1.52rem);
+  font-weight: 500;
+  line-height: 1.08;
 }
 
 .stage {
@@ -134,7 +155,8 @@ button {
   background-size: auto, auto, auto, cover, cover, auto, auto;
   background-position: center;
   box-shadow:
-    0 32px 90px rgba(0, 0, 0, 0.34);
+    0 46px 120px rgba(0, 0, 0, 0.52),
+    0 16px 36px rgba(58, 35, 17, 0.32);
 }
 
 .board::before {
@@ -181,7 +203,8 @@ button {
   position: absolute;
   z-index: 10;
   touch-action: none;
-  padding: 10px 10px 34px;
+  --caption-space: 28px;
+  padding: 10px 10px var(--caption-space);
   border: 0;
   background:
     linear-gradient(135deg, rgba(255, 251, 233, 0.74), transparent 38%),
@@ -300,7 +323,7 @@ button {
 .photo-img {
   display: block;
   width: 100%;
-  height: calc(100% - 25px);
+  height: calc(100% - 18px);
   background-image:
     linear-gradient(rgba(255, 232, 176, 0.04), rgba(84, 46, 19, 0.12)),
     url("public/memories/light-contact-sheet.png");
@@ -311,14 +334,18 @@ button {
 .caption {
   position: absolute;
   right: 10px;
-  bottom: 7px;
+  bottom: 8px;
   left: 10px;
   overflow: hidden;
+  max-height: 1.12em;
   color: #4c3324;
-  font-family: "Segoe Print", cursive;
-  font-size: 0.92rem;
-  line-height: 0.92;
+  font-family: var(--font-hand);
+  font-size: clamp(0.58rem, calc(var(--photo-w, 150) * 0.0052rem), 0.82rem);
+  font-weight: 500;
+  line-height: 1.12;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tape,
@@ -364,9 +391,10 @@ button {
     linear-gradient(135deg, rgba(255, 248, 222, 0.4), transparent 44%),
     #d8bd8d;
   color: #4c3324;
-  font-family: "Segoe Print", cursive;
-  font-size: 1.08rem;
-  line-height: 1.05;
+  font-family: var(--font-hand);
+  font-size: 0.94rem;
+  font-weight: 500;
+  line-height: 1.25;
   text-align: center;
   box-shadow:
     0 18px 34px rgba(64, 38, 18, 0.24),
@@ -389,7 +417,7 @@ button {
     #bd9668;
   color: rgba(59, 37, 23, 0.74);
   box-shadow: 0 12px 26px rgba(74, 42, 19, 0.24);
-  font-family: Georgia, serif;
+  font-family: var(--font-hand);
   pointer-events: none;
 }
 
@@ -416,7 +444,7 @@ button {
 
 .scrap small {
   margin-top: 5px;
-  font-family: "Segoe Print", cursive;
+  font-family: var(--font-hand);
 }
 
 .flowers {
@@ -501,11 +529,13 @@ body.decor-paper .flowers {
 }
 
 .detail-photo {
-  width: min(82vw, 320px);
-  height: min(52vh, 410px);
+  --detail-paper: #efe1c8;
+  width: min(86vw, var(--detail-frame-width, 340px));
+  height: auto;
+  aspect-ratio: var(--detail-ratio, 4 / 5);
   margin: 0 auto 26px;
   padding: 13px 13px 54px;
-  background: #efe3cc;
+  background: var(--detail-paper);
   box-shadow: 0 28px 76px rgba(0, 0, 0, 0.44);
   transform: rotate(-2deg);
 }
@@ -515,11 +545,11 @@ body.decor-paper .flowers {
   width: 100%;
   height: 100%;
   content: "";
-  background-image:
-    linear-gradient(rgba(255, 232, 176, 0.04), rgba(84, 46, 19, 0.12)),
-    var(--detail-src, url("public/memories/light-contact-sheet.png"));
+  background-color: var(--detail-paper);
+  background-image: var(--detail-src, url("public/memories/light-contact-sheet.png"));
   background-size: var(--detail-size, 400% 300%);
   background-position: var(--crop);
+  background-repeat: no-repeat;
 }
 
 .detail-video {
@@ -569,32 +599,47 @@ body.decor-paper .flowers {
 .detail p {
   margin: 0 0 8px;
   color: rgba(244, 223, 189, 0.58);
-  font-size: 0.75rem;
-  letter-spacing: 0.15em;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .detail h2 {
-  margin: 0;
-  font-family: "Segoe Print", cursive;
-  font-size: clamp(2.1rem, 12vw, 3.7rem);
-  font-weight: 400;
-  line-height: 0.86;
+  display: inline-block;
+  max-width: min(88vw, 430px);
+  margin: 0 auto;
+  padding: 10px 16px 12px;
+  border-radius: 14px;
+  background: rgba(245, 224, 190, 0.92);
+  color: #4a2f1f;
+  font-family: var(--font-hand);
+  font-size: clamp(1.42rem, 7.4vw, 2.55rem);
+  font-weight: 500;
+  line-height: 1.14;
+  box-shadow: 0 18px 44px rgba(43, 25, 12, 0.26);
+  overflow-wrap: anywhere;
+  text-shadow: none;
+  text-wrap: balance;
 }
 
 .detail span {
   display: block;
-  margin: 16px auto 0;
+  margin: 14px auto 0;
   max-width: 340px;
-  color: rgba(244, 223, 189, 0.76);
-  line-height: 1.7;
+  padding: 9px 13px;
+  border-radius: 12px;
+  background: rgba(58, 35, 20, 0.74);
+  color: rgba(255, 239, 211, 0.94);
+  font-size: 0.95rem;
+  line-height: 1.58;
+  box-shadow: 0 14px 34px rgba(35, 20, 10, 0.22);
 }
 
 .detail span:empty {
   display: none;
 }
 
-.view-all,
 .fit,
 .music-player,
 .admin-toggle {
@@ -608,17 +653,19 @@ body.decor-paper .flowers {
   box-shadow: 0 18px 52px rgba(0, 0, 0, 0.28);
 }
 
-.view-all,
 .fit {
   display: none;
   padding: 12px 16px;
 }
 
-.view-all { right: 22px; }
-.view-all.show { display: block; }
 .fit {
   left: 22px;
   display: block;
+}
+
+.view-all,
+.ending {
+  display: none !important;
 }
 
 .admin-toggle {
@@ -637,6 +684,11 @@ body.decor-paper .flowers {
   min-height: 48px;
   padding: 8px 13px 8px 9px;
   transform: translateX(-50%);
+}
+
+.music-player > span:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .music-player__play {
@@ -692,10 +744,10 @@ body.decor-paper .flowers {
 }
 
 .ending strong {
-  font-family: Georgia, serif;
-  font-size: clamp(3rem, 13vw, 7rem);
-  font-weight: 400;
-  line-height: 0.92;
+  font-family: var(--font-hand);
+  font-size: clamp(2.1rem, 9vw, 4.8rem);
+  font-weight: 600;
+  line-height: 1.08;
 }
 
 footer {
@@ -713,7 +765,8 @@ footer {
 
 body.detail-open .music-player,
 body.detail-open .board-title,
-body.detail-open footer {
+body.detail-open footer,
+body.detail-open .fit {
   opacity: 0;
   pointer-events: none;
 }
@@ -766,8 +819,8 @@ body.detail-open footer {
 
 .admin-panel__head h2 {
   margin-top: 4px;
-  font-family: Georgia, serif;
-  font-weight: 400;
+  font-family: var(--font-hand);
+  font-weight: 600;
 }
 
 .admin-panel__head button {
@@ -866,9 +919,9 @@ body.detail-open footer {
 .admin-section h3 {
   margin: 18px 0 10px;
   color: #ffdca0;
-  font-family: Georgia, serif;
+  font-family: var(--font-hand);
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .admin-section textarea,
@@ -950,7 +1003,7 @@ body.detail-open footer {
   border-radius: 10px;
   background: rgba(255, 211, 130, 0.18);
   color: #ffdda4;
-  font-family: Georgia, serif;
+  font-family: var(--font-hand);
 }
 
 .photo-text-row label {
@@ -968,6 +1021,10 @@ body.detail-open footer {
   margin-top: 10px;
 }
 
+.selected-actions [data-size-step] {
+  background: rgba(255, 211, 130, 0.16);
+}
+
 .editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -977,6 +1034,24 @@ body.detail-open footer {
 .editor-grid label:first-child,
 .editor-grid label:nth-child(2) {
   grid-column: 1 / -1;
+}
+
+.editor-grid .size-control {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px solid rgba(255, 226, 170, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.size-control span {
+  color: #ffd58b;
+  font-size: 0.82rem;
+}
+
+.size-control input[type="range"] {
+  padding: 0;
+  accent-color: #ffd58b;
 }
 
 .danger {
@@ -1008,6 +1083,28 @@ body.detail-open footer {
 
   .board-title h1 {
     font-size: 1rem;
+  }
+
+  .caption {
+    font-size: 0.76rem;
+    line-height: 1.08;
+  }
+
+  .note {
+    font-size: 0.86rem;
+    line-height: 1.22;
+  }
+
+  .detail h2 {
+    max-width: min(86vw, 360px);
+    font-size: clamp(1.34rem, 7vw, 2.15rem);
+    line-height: 1.14;
+  }
+
+  .detail span {
+    max-width: min(84vw, 330px);
+    font-size: 0.88rem;
+    line-height: 1.5;
   }
 
   footer {

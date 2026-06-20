@@ -9,6 +9,8 @@ const PHOTO_COUNT = 40;
 const PHOTO_FOLDER_VERSION = "numbered-photo-folder-v1";
 const PROJECT_SYNC_INTERVAL = 2500;
 const VIDEO_EXTENSIONS = ["mp4", "mov", "webm", "m4v"];
+const BACKGROUND_MUSIC_VOLUME = 0.42;
+const VIDEO_DUCK_GAIN = 10 ** (-5 / 20);
 const isAdminMode = new URLSearchParams(location.search).has("admin");
 const hasCmsServer = () => {
   const host = location.hostname;
@@ -62,6 +64,7 @@ let audioPlaylist = [];
 let currentAudioIndex = 0;
 let backgroundMusicDesired = false;
 let shouldResumeMusicAfterVideo = false;
+let isMusicDuckedForVideo = false;
 const pointers = new Map();
 const pendingThemeFiles = new Map();
 const pendingLayerFiles = new Map();
@@ -140,6 +143,38 @@ function imageCssSources(src) {
   if (!match) return `url("${src}")`;
   const base = `public/photos/${match[1]}`;
   return [`${base}.jpg`, `${base}.jpeg`, `${base}.png`, `${base}.webp`].map((candidate) => `url("${candidate}")`).join(", ");
+}
+
+function imageSourceCandidates(src) {
+  if (!src || src.startsWith("data:")) return src ? [src] : [];
+  const match = String(src).match(/^public\/photos\/(\d+)\.(png|jpe?g|webp)$/i);
+  if (!match) return [src];
+  const base = `public/photos/${match[1]}`;
+  return [...new Set([src, `${base}.jpg`, `${base}.jpeg`, `${base}.png`, `${base}.webp`])];
+}
+
+function loadImageSize(src) {
+  const candidates = imageSourceCandidates(src);
+  return new Promise((resolve) => {
+    const loadNext = (index) => {
+      const candidate = candidates[index];
+      if (!candidate) {
+        resolve(null);
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => resolve({
+        src: candidate,
+        width: image.naturalWidth || image.width,
+        height: image.naturalHeight || image.height
+      });
+      image.onerror = () => loadNext(index + 1);
+      image.src = candidate;
+    };
+
+    loadNext(0);
+  });
 }
 
 function videoCandidatesForPhoto(photo, media) {
@@ -687,6 +722,7 @@ function applyLayers() {
   const background = project.layers.background;
   const boardLayer = project.layers.board;
   const boardImage = boardLayer.image || DEFAULT_BOARD_IMAGE;
+  document.body.classList.toggle("has-plain-background-image", Boolean(background.image));
   document.body.style.setProperty("--layer-bg-image", background.image ? `url("${background.image}")` : "none");
   document.body.style.setProperty("--layer-bg-opacity", background.opacity ?? 0);
   document.body.style.setProperty("--layer-bg-filter", `blur(${background.blur ?? 0}px) brightness(${background.brightness ?? 1}) contrast(${background.contrast ?? 1}) saturate(${background.saturation ?? 1})`);
@@ -763,11 +799,13 @@ function renderPhoto(photo) {
   button.type = "button";
   button.className = "photo editable-item";
   setPositionStyles(button, photo);
+  const caption = photo.caption || "";
+  button.style.setProperty("--photo-w", Number(photo.w || 150));
   button.innerHTML = `<span class="tape top"></span><span class="photo-img"></span><span class="caption"></span>`;
   button.querySelector(".photo-img").style.backgroundImage = `linear-gradient(rgba(255,232,176,.04), rgba(84,46,19,.12)), ${imageCssSources(media.src)}`;
   button.querySelector(".photo-img").style.backgroundPosition = photo.crop || "center";
   button.querySelector(".photo-img").style.backgroundSize = media.src.startsWith("data:") || media.src.includes("public/photos/") ? "cover" : "400% 300%";
-  button.querySelector(".caption").textContent = photo.caption || "";
+  button.querySelector(".caption").textContent = caption;
   addEditorHandles(button, photo);
   bindBoardItem(button, photo);
   board.appendChild(button);
@@ -821,15 +859,20 @@ function bindBoardItem(element, item) {
         event.preventDefault();
         event.stopPropagation();
         element.setPointerCapture(event.pointerId);
-        tapState = {
-          item,
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          lastX: event.clientX,
-          lastY: event.clientY,
-          moved: false
-        };
+        beginViewerGesture(event);
+        if (pointers.size === 1) {
+          tapState = {
+            item,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
+            moved: false
+          };
+        } else {
+          tapState = null;
+        }
       }
       return;
     }
@@ -859,6 +902,14 @@ function bindBoardItem(element, item) {
   });
 
   element.addEventListener("pointermove", (event) => {
+    if (!isAdminMode && isPhotoItem(item) && !selected && pointers.has(event.pointerId)) {
+      updateViewerGesture(event);
+      if (pointers.size > 1) {
+        if (tapState?.item.id === item.id) tapState = null;
+        return;
+      }
+    }
+
     if (tapState?.item.id === item.id && tapState.pointerId === event.pointerId) {
       const moved = Math.hypot(event.clientX - tapState.startX, event.clientY - tapState.startY);
       if (moved > 10) {
@@ -897,12 +948,21 @@ function bindBoardItem(element, item) {
       element.releasePointerCapture?.(event.pointerId);
       const shouldOpen = !tapState.moved && isPhotoItem(item) && !selected;
       tapState = null;
+      endViewerGesture(event);
       if (shouldOpen) openPhoto(item);
       return;
     }
     element.releasePointerCapture?.(event.pointerId);
+    if (!isAdminMode && isPhotoItem(item) && !selected) {
+      endViewerGesture(event);
+      return;
+    }
     dragState = null;
     renderAll();
+  });
+
+  element.addEventListener("pointercancel", (event) => {
+    if (!isAdminMode && isPhotoItem(item) && !selected) endViewerGesture(event);
   });
 
   element.addEventListener("click", (event) => {
@@ -935,6 +995,21 @@ function applyElementPosition(element, item) {
   element.style.transform = `rotate(${item.rotation ?? 0}deg)`;
 }
 
+function ensureItemSizeBaseline(item) {
+  item.baseW = Number(item.baseW || item.w || 120);
+  item.baseH = Number(item.baseH || item.h || 140);
+  item.scale = Number(item.scale || Math.round((Number(item.w || item.baseW) / item.baseW) * 100) || 100);
+  return item.scale;
+}
+
+function setItemScale(item, percent) {
+  ensureItemSizeBaseline(item);
+  const nextScale = Math.max(35, Math.min(220, Math.round(Number(percent) || 100)));
+  item.scale = nextScale;
+  item.w = Math.round(item.baseW * nextScale / 100);
+  item.h = Math.round(item.baseH * nextScale / 100);
+}
+
 function renderSelectedEditor() {
   if (!isAdminMode || !selectedEditor) return;
   if (!selectedItem) {
@@ -944,10 +1019,12 @@ function renderSelectedEditor() {
 
   const isPhoto = isPhotoItem(selectedItem);
   const isNote = "text" in selectedItem;
+  const sizeScale = isPhoto ? ensureItemSizeBaseline(selectedItem) : 100;
   selectedEditor.innerHTML = `
     <div class="editor-grid">
       ${isPhoto ? `<label>Caption <input data-edit="caption" value="${escapeAttr(selectedItem.caption || "")}" /></label>` : ""}
       ${isPhoto ? `<label>Detail note <textarea data-edit="detailNote" placeholder="Note hiện khi tap ảnh">${escapeHtml(selectedItem.detailNote || "")}</textarea></label>` : ""}
+      ${isPhoto ? `<label class="size-control">Kích thước ảnh <span data-scale-value>${sizeScale}%</span><input type="range" min="35" max="220" step="1" data-size-scale value="${sizeScale}" /></label>` : ""}
       ${isNote ? `<label>Text <textarea data-edit="text">${escapeHtml(selectedItem.text || "")}</textarea></label>` : ""}
       ${isNote ? `<label>Màu note <input type="color" data-edit="color" value="${selectedItem.color || "#d8bd8d"}" /></label>` : ""}
       <label>X <input type="number" data-edit="x" value="${selectedItem.x}" /></label>
@@ -961,6 +1038,9 @@ function renderSelectedEditor() {
       ${isPhoto && selectedItem.videoSrc ? `<label>Video hiện tại <input value="${escapeAttr(selectedItem.videoName || "video đã chọn")}" readonly /></label>` : ""}
     </div>
     <div class="selected-actions">
+      ${isPhoto ? `<button type="button" data-size-step="-10">Nhỏ -</button>` : ""}
+      ${isPhoto ? `<button type="button" data-size-step="10">Lớn +</button>` : ""}
+      ${isPhoto ? `<button type="button" data-size-step="reset">Reset size</button>` : ""}
       <button type="button" data-duplicate-item>Nhân bản</button>
       ${isPhoto ? `<button type="button" data-preview-photo>Xem lớn</button>` : ""}
       ${isPhoto && selectedItem.videoSrc ? `<button type="button" data-clear-video>Xóa video</button>` : ""}
@@ -972,10 +1052,36 @@ function renderSelectedEditor() {
     field.addEventListener("input", () => {
       const key = field.dataset.edit;
       selectedItem[key] = field.type === "number" ? Number(field.value) : field.value;
+      if (key === "w" || key === "h") {
+        selectedItem.baseW = Number(selectedItem.w || 120);
+        selectedItem.baseH = Number(selectedItem.h || 140);
+        selectedItem.scale = 100;
+      }
       renderContent();
       renderBoard();
       renderMediaLibrary();
       saveProject();
+    });
+  });
+
+  selectedEditor.querySelector("[data-size-scale]")?.addEventListener("input", (event) => {
+    setItemScale(selectedItem, event.target.value);
+    selectedEditor.querySelector("[data-scale-value]").textContent = `${selectedItem.scale}%`;
+    selectedEditor.querySelector('[data-edit="w"]').value = selectedItem.w;
+    selectedEditor.querySelector('[data-edit="h"]').value = selectedItem.h;
+    renderContent();
+    renderBoard();
+    renderMediaLibrary();
+    saveProject();
+  });
+
+  selectedEditor.querySelectorAll("[data-size-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const slider = selectedEditor.querySelector("[data-size-scale]");
+      if (!slider) return;
+      const nextValue = button.dataset.sizeStep === "reset" ? 100 : Number(slider.value) + Number(button.dataset.sizeStep);
+      slider.value = Math.max(35, Math.min(220, nextValue));
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
   });
 
@@ -1057,8 +1163,7 @@ function renderPhotoTextTable() {
       const photo = project.photos.find((item) => item.id === field.dataset.photoCaption);
       if (!photo) return;
       photo.caption = field.value;
-      const caption = board.querySelector(`[data-id="${photo.id}"] .caption`);
-      if (caption) caption.textContent = field.value;
+      renderBoard();
       saveProject();
     });
   });
@@ -1442,6 +1547,27 @@ async function importProject(event) {
   renderAll();
 }
 
+function setDetailPhotoRatio(width, height) {
+  const safeWidth = Math.max(1, Number(width) || 4);
+  const safeHeight = Math.max(1, Number(height) || 5);
+  const ratio = safeWidth / safeHeight;
+  const viewport = window.visualViewport;
+  const maxWidth = Math.min((viewport?.width ?? innerWidth) * 0.86, 430);
+  const maxHeight = Math.min((viewport?.height ?? innerHeight) * 0.6, 560);
+  const frameWidth = Math.max(230, Math.min(maxWidth, maxHeight * ratio));
+  detailPhoto.style.setProperty("--detail-ratio", `${Math.round(safeWidth)} / ${Math.round(safeHeight)}`);
+  detailPhoto.style.setProperty("--detail-frame-width", `${Math.round(frameWidth)}px`);
+}
+
+async function applyOriginalDetailPhotoRatio(photo, media) {
+  const image = await loadImageSize(media?.src || "");
+  if (!image || !selected || selected.id !== photo.id) return;
+  setDetailPhotoRatio(image.width, image.height);
+  if (image.src && image.src !== media.src) {
+    detailPhoto.style.setProperty("--detail-src", `url("${image.src}")`);
+  }
+}
+
 function openPhoto(photo) {
   returnViewBeforeFocus = {
     view: { ...view },
@@ -1452,9 +1578,13 @@ function openPhoto(photo) {
   document.body.classList.add("detail-open");
   opened.add(photo.id);
   const media = mediaById(photo.mediaId);
+  const imageAreaWidth = Math.max(80, Number(photo.w || 160) - 20);
+  const imageAreaHeight = Math.max(80, Number(photo.h || 180) - 59);
   detailPhoto.style.setProperty("--detail-src", imageCssSources(media.src));
   detailPhoto.style.setProperty("--crop", photo.crop || "center");
-  detailPhoto.style.setProperty("--detail-size", media.src?.startsWith("data:") || media.src?.includes("public/photos/") ? "cover" : "400% 300%");
+  setDetailPhotoRatio(imageAreaWidth, imageAreaHeight);
+  detailPhoto.style.setProperty("--detail-size", media.src?.startsWith("data:") || media.src?.includes("public/photos/") ? "contain" : "400% 300%");
+  applyOriginalDetailPhotoRatio(photo, media);
   detailTitle.textContent = photo.caption || "";
   detailNote.textContent = photo.detailNote || "";
   detailDate.textContent = "memory";
@@ -1466,7 +1596,6 @@ function openPhoto(photo) {
   detailVideoPlay.disabled = true;
   prepareDetailVideo(photo, media);
   detail.classList.add("open");
-  if (opened.size >= 4) viewAll.classList.add("show");
   renderBoardTransform();
 }
 
@@ -1549,7 +1678,7 @@ async function playBackgroundMusic() {
   if (!audio) return;
   backgroundMusicDesired = true;
   try {
-    audio.volume = 0.42;
+    applyBackgroundMusicVolume();
     await audio.play();
     updateMusicUi(true);
   } catch {
@@ -1564,12 +1693,40 @@ function pauseBackgroundMusic({ userRequested = false } = {}) {
   updateMusicUi(false);
 }
 
+function backgroundMusicVolume() {
+  return BACKGROUND_MUSIC_VOLUME * (isMusicDuckedForVideo ? VIDEO_DUCK_GAIN : 1);
+}
+
+function applyBackgroundMusicVolume() {
+  if (!audio) return;
+  audio.volume = Math.max(0, Math.min(1, backgroundMusicVolume()));
+}
+
+async function duckBackgroundMusicForVideo() {
+  if (!audio || !backgroundMusicDesired) return;
+  isMusicDuckedForVideo = true;
+  applyBackgroundMusicVolume();
+  if (audio.paused) {
+    await playBackgroundMusic();
+  } else {
+    updateMusicUi(true);
+  }
+}
+
+function restoreBackgroundMusicAfterVideo() {
+  if (!isMusicDuckedForVideo) return;
+  isMusicDuckedForVideo = false;
+  applyBackgroundMusicVolume();
+  updateMusicUi(backgroundMusicDesired && !audio?.paused);
+}
+
 function updateMusicUi(isPlaying) {
   musicButton.classList.toggle("playing", isPlaying);
   musicButton.querySelector(".music-player__play").textContent = isPlaying ? "Ⅱ" : "▶";
   if (isPlaying) {
     const track = audioPlaylist[currentAudioIndex];
-    musicStatus.textContent = audioPlaylist.length > 1 ? `đang phát ${currentAudioIndex + 1}/${audioPlaylist.length}` : "đang phát nền";
+    const duckLabel = isMusicDuckedForVideo ? " · -5 dB" : "";
+    musicStatus.textContent = audioPlaylist.length > 1 ? `đang phát ${currentAudioIndex + 1}/${audioPlaylist.length}${duckLabel}` : `đang phát nền${duckLabel}`;
     if (track?.name) musicButton.querySelector("b").textContent = track.name;
   } else if (backgroundMusicDesired && shouldResumeMusicAfterVideo) {
     musicStatus.textContent = "đang giữ nhạc nền";
@@ -1579,6 +1736,7 @@ function updateMusicUi(isPlaying) {
 }
 
 async function resumeBackgroundMusicAfterVideo() {
+  restoreBackgroundMusicAfterVideo();
   if (!shouldResumeMusicAfterVideo) return;
   shouldResumeMusicAfterVideo = false;
   if (backgroundMusicDesired) await playBackgroundMusic();
@@ -1629,6 +1787,63 @@ function applyView({ focused = false } = {}) {
   board.style.transform = `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
 }
 
+function beginViewerGesture(event) {
+  if (isAdminMode || selected) return;
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  mode = "manual";
+  gestureMoved = false;
+
+  if (pointers.size === 1) {
+    panStart = { pointer: { x: event.clientX, y: event.clientY }, view: { ...view } };
+  }
+
+  if (pointers.size === 2) {
+    const values = [...pointers.values()];
+    pinchStart = {
+      distance: Math.hypot(values[0].x - values[1].x, values[0].y - values[1].y),
+      view: { ...view },
+      center: { x: (values[0].x + values[1].x) / 2, y: (values[0].y + values[1].y) / 2 }
+    };
+    gestureMoved = true;
+  }
+}
+
+function updateViewerGesture(event) {
+  if (!pointers.has(event.pointerId) || isAdminMode) return;
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+  if (pointers.size === 2 && pinchStart) {
+    const values = [...pointers.values()];
+    const nextScale = clamp(
+      pinchStart.view.scale * (Math.hypot(values[0].x - values[1].x, values[0].y - values[1].y) / pinchStart.distance),
+      overviewScale() * 0.84,
+      1.55
+    );
+    const ratio = nextScale / pinchStart.view.scale;
+    view.scale = nextScale;
+    view.x = pinchStart.center.x - innerWidth / 2 - (pinchStart.center.x - innerWidth / 2 - pinchStart.view.x) * ratio;
+    view.y = pinchStart.center.y - innerHeight / 2 - (pinchStart.center.y - innerHeight / 2 - pinchStart.view.y) * ratio;
+    gestureMoved = true;
+    applyView();
+    return;
+  }
+
+  if (pointers.size === 1 && panStart) {
+    const moved = Math.hypot(event.clientX - panStart.pointer.x, event.clientY - panStart.pointer.y);
+    if (moved > 8) gestureMoved = true;
+    view.x = panStart.view.x + event.clientX - panStart.pointer.x;
+    view.y = panStart.view.y + event.clientY - panStart.pointer.y;
+    applyView();
+  }
+}
+
+function endViewerGesture(event) {
+  if (tapState?.pointerId === event.pointerId) tapState = null;
+  pointers.delete(event.pointerId);
+  panStart = null;
+  pinchStart = null;
+}
+
 function renderBoardTransform() {
   if (!project?.board) return;
   if (mode === "manual") {
@@ -1656,61 +1871,15 @@ function renderBoardTransform() {
 board.addEventListener("pointerdown", (event) => {
   if (isAdminMode || selected) return;
   board.setPointerCapture(event.pointerId);
-  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  mode = "manual";
-  gestureMoved = false;
-
-  if (pointers.size === 1) {
-    panStart = { pointer: { x: event.clientX, y: event.clientY }, view: { ...view } };
-  }
-
-  if (pointers.size === 2) {
-    const values = [...pointers.values()];
-    pinchStart = {
-      distance: Math.hypot(values[0].x - values[1].x, values[0].y - values[1].y),
-      view: { ...view },
-      center: { x: (values[0].x + values[1].x) / 2, y: (values[0].y + values[1].y) / 2 }
-    };
-  }
+  beginViewerGesture(event);
 });
 
 board.addEventListener("pointermove", (event) => {
-  if (!pointers.has(event.pointerId) || isAdminMode) return;
-  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-
-  if (pointers.size === 2 && pinchStart) {
-    const values = [...pointers.values()];
-    const nextScale = clamp(
-      pinchStart.view.scale * (Math.hypot(values[0].x - values[1].x, values[0].y - values[1].y) / pinchStart.distance),
-      overviewScale() * 0.84,
-      1.55
-    );
-    const ratio = nextScale / pinchStart.view.scale;
-    view.scale = nextScale;
-    view.x = pinchStart.center.x - innerWidth / 2 - (pinchStart.center.x - innerWidth / 2 - pinchStart.view.x) * ratio;
-    view.y = pinchStart.center.y - innerHeight / 2 - (pinchStart.center.y - innerHeight / 2 - pinchStart.view.y) * ratio;
-    applyView();
-    return;
-  }
-
-  if (pointers.size === 1 && panStart) {
-    const moved = Math.hypot(event.clientX - panStart.pointer.x, event.clientY - panStart.pointer.y);
-    if (moved > 8) gestureMoved = true;
-    view.x = panStart.view.x + event.clientX - panStart.pointer.x;
-    view.y = panStart.view.y + event.clientY - panStart.pointer.y;
-    applyView();
-  }
+  updateViewerGesture(event);
 });
 
-function endPointer(event) {
-  if (tapState?.pointerId === event.pointerId) tapState = null;
-  pointers.delete(event.pointerId);
-  panStart = null;
-  pinchStart = null;
-}
-
-board.addEventListener("pointerup", endPointer);
-board.addEventListener("pointercancel", endPointer);
+board.addEventListener("pointerup", endViewerGesture);
+board.addEventListener("pointercancel", endViewerGesture);
 
 document.querySelector("[data-close]").addEventListener("click", () => {
   closeDetail();
@@ -1735,19 +1904,23 @@ detail.addEventListener("click", (event) => {
 detailVideoPlay.addEventListener("click", async (event) => {
   event.stopPropagation();
   if (!activeDetailVideoSrc) return;
-  shouldResumeMusicAfterVideo = backgroundMusicDesired;
-  if (shouldResumeMusicAfterVideo) pauseBackgroundMusic();
+  shouldResumeMusicAfterVideo = false;
+  await duckBackgroundMusicForVideo();
   detailVideo.src = activeDetailVideoSrc;
   detail.classList.add("has-video");
   detailVideoPlay.hidden = true;
   try {
     await detailVideo.play();
   } catch {
+    restoreBackgroundMusicAfterVideo();
     detailVideo.controls = true;
   }
 });
 
 detailVideo.addEventListener("loadedmetadata", sizeDetailVideoToMetadata);
+detailVideo.addEventListener("play", () => {
+  duckBackgroundMusicForVideo();
+});
 detailVideo.addEventListener("ended", resumeBackgroundMusicAfterVideo);
 detailVideo.addEventListener("pause", () => {
   if (detail.classList.contains("has-video") && !detailVideo.ended) resumeBackgroundMusicAfterVideo();
