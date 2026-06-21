@@ -65,6 +65,7 @@ let currentAudioIndex = 0;
 let backgroundMusicDesired = false;
 let shouldResumeMusicAfterVideo = false;
 let isMusicDuckedForVideo = false;
+let videoManifestFiles = null;
 const pointers = new Map();
 const pendingThemeFiles = new Map();
 const pendingLayerFiles = new Map();
@@ -200,6 +201,7 @@ async function firstExistingVideo(candidates) {
   for (const candidate of candidates) {
     if (!candidate) continue;
     if (candidate.startsWith("data:")) return candidate;
+    if (videoManifestFiles?.has(candidate.replace(/^\.\//, ""))) return candidate;
     try {
       const response = await fetch(candidate, { method: "HEAD", cache: "no-store" });
       if (response.ok) return candidate;
@@ -213,6 +215,17 @@ async function firstExistingVideo(candidates) {
     }
   }
   return "";
+}
+
+async function setupVideoManifest() {
+  try {
+    const response = await fetch("public/videos/manifest.json", { cache: "no-store" });
+    const data = response.ok ? await response.json() : null;
+    const files = Array.isArray(data?.files) ? data.files : [];
+    videoManifestFiles = new Set(files.map((file) => String(file).replace(/\\/g, "/").replace(/^\.\//, "")));
+  } catch {
+    videoManifestFiles = null;
+  }
 }
 
 async function prepareDetailVideo(photo, media) {
@@ -248,6 +261,7 @@ function defaultPhotoLayout(number) {
 
 async function init() {
   setupAudioPlaylist();
+  setupVideoManifest();
   const storedProject = await loadProject();
   if (storedProject) {
     project = storedProject;
